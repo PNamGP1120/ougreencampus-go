@@ -3,17 +3,23 @@ package activity
 import (
 	"time"
 
+	"gorm.io/datatypes"
 	"gorm.io/gorm"
+)
+
+const (
+	TypeProgram  = "program"
+	TypeContest  = "contest"
+	TypeCampaign = "campaign"
 )
 
 type Activity struct {
 	ID          string `gorm:"type:uuid;default:gen_random_uuid();primaryKey"`
-	Name        string `gorm:"not null"`
-	Description string `gorm:"type:text"`
-	Type        string `gorm:"not null"` // program | contest | campaign
-	StartDate   time.Time
-	EndDate     time.Time
-	CreatedBy   string `gorm:"not null"`
+	Name        string
+	Description string
+	Type        string
+	Status      string
+	CreatedBy   string
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
 	DeletedAt   gorm.DeletedAt `gorm:"index"`
@@ -21,10 +27,35 @@ type Activity struct {
 
 type Submission struct {
 	ID         string `gorm:"type:uuid;default:gen_random_uuid();primaryKey"`
-	ActivityID string `gorm:"index"`
-	UserID     string `gorm:"index"`
-	Content    string `gorm:"type:text"`
-	Score      int
-	Status     string `gorm:"default:pending"`
+	ActivityID string
+	UserID     string
+	Content    string
+	Status     string
+	Score      *int
 	CreatedAt  time.Time
+	UpdatedAt  time.Time
+	DeletedAt  gorm.DeletedAt `gorm:"index"`
+}
+
+type CampaignTask struct {
+	ID         string `gorm:"type:uuid;default:gen_random_uuid();primaryKey"`
+	ActivityID string
+	Title      string
+	Points     int
+	IsActive   bool
+	CreatedAt  time.Time
+	UpdatedAt  time.Time
+	DeletedAt  gorm.DeletedAt `gorm:"index"`
+}
+
+type CampaignProgress struct {
+	ID         string `gorm:"type:uuid;default:gen_random_uuid();primaryKey"`
+	ActivityID string
+	TaskID     string
+	UserID     string
+	Status     string
+	Evidence   datatypes.JSON
+	CreatedAt  time.Time
+	UpdatedAt  time.Time
+	DeletedAt  gorm.DeletedAt `gorm:"index"`
 }

@@ -31,11 +31,45 @@ func (h *Handler) CreateUser(c *gin.Context) {
 }
 
 func (h *Handler) GetAllUsers(c *gin.Context) {
-	users, err := h.service.GetAllUsers()
+	users, err := h.service.GetAll()
 	if err != nil {
 		response.InternalServerError(c, err.Error())
 		return
 	}
 
 	response.Success(c, http.StatusOK, users)
+}
+
+func (h *Handler) UpdateRole(c *gin.Context) {
+	id := c.Param("id")
+
+	var req UpdateRoleRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, err.Error())
+		return
+	}
+
+	if err := h.service.UpdateRole(id, req); err != nil {
+		response.BadRequest(c, err.Error())
+		return
+	}
+
+	response.Message(c, http.StatusOK, "role updated")
+}
+
+func (h *Handler) ToggleActive(c *gin.Context) {
+	id := c.Param("id")
+
+	var req ToggleActiveRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, err.Error())
+		return
+	}
+
+	if err := h.service.SetActive(id, req.IsActive); err != nil {
+		response.BadRequest(c, err.Error())
+		return
+	}
+
+	response.Message(c, http.StatusOK, "user status updated")
 }

@@ -7,13 +7,13 @@ import (
 )
 
 type Content struct {
-	ID        string `gorm:"type:uuid;default:gen_random_uuid();primaryKey"`
-	Title     string `gorm:"not null"`
-	Body      string `gorm:"type:text"`
-	Type      string `gorm:"not null"` // news | blog | green_news
-	Status    string `gorm:"default:draft"`
-	AuthorID  string `gorm:"not null"`
-	CreatedAt time.Time
-	UpdatedAt time.Time
-	DeletedAt gorm.DeletedAt `gorm:"index"`
+	ID         string `gorm:"type:uuid;default:gen_random_uuid();primaryKey"`
+	Title      string `gorm:"not null"`
+	Body       string `gorm:"type:text"`
+	Type       string `gorm:"not null"` // news | blog | green_news
+	IsFeatured bool   `gorm:"default:false"`
+	AuthorID   string
+	CreatedAt  time.Time
+	UpdatedAt  time.Time
+	DeletedAt  gorm.DeletedAt `gorm:"index"`
 }

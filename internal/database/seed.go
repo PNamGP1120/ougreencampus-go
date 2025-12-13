@@ -1,175 +1,262 @@
 package database
 
 import (
+	"errors"
 	"fmt"
 	"time"
 
-	"github.com/PNamGP1120/ougreencampus-go/internal/config"
 	"github.com/PNamGP1120/ougreencampus-go/internal/modules/activity"
 	"github.com/PNamGP1120/ougreencampus-go/internal/modules/content"
 	"github.com/PNamGP1120/ougreencampus-go/internal/modules/event"
 	"github.com/PNamGP1120/ougreencampus-go/internal/modules/system"
 	"github.com/PNamGP1120/ougreencampus-go/internal/modules/user"
 	"github.com/PNamGP1120/ougreencampus-go/internal/utils"
+	"gorm.io/datatypes"
 	"gorm.io/gorm"
 )
 
 func Seed(db *gorm.DB) error {
-	fmt.Println("🌱 Seeding database...")
+	// Guard: ensure tables exist (quick check)
+	if !db.Migrator().HasTable(&user.User{}) {
+		return errors.New("seed aborted: users table does not exist (run migrate first)")
+	}
 
-	// ================= USERS =================
+	// ===== USERS =====
 	var count int64
-	db.Model(&user.User{}).Count(&count)
+	if err := db.Model(&user.User{}).Count(&count).Error; err != nil {
+		return err
+	}
 	if count == 0 {
-		roles := []string{
-			config.RoleAdmin,
-			config.RoleOrganizer,
-			config.RoleStudent,
-			config.RoleStudent,
-			config.RoleStudent,
+		hash, err := utils.HashPassword("123456")
+		if err != nil {
+			return err
 		}
 
-		for i := 1; i <= 10; i++ {
-			role := roles[i%len(roles)]
-			password, _ := utils.HashPassword("123456")
+		// deterministic roles for easier testing
+		seedUsers := []struct {
+			Email string
+			Role  string
+		}{
+			{"user1@ou.edu.vn", "admin"},
+			{"user2@ou.edu.vn", "organizer"},
+			{"user3@ou.edu.vn", "student"},
+			{"user4@ou.edu.vn", "student"},
+			{"user5@ou.edu.vn", "student"},
+			{"user6@ou.edu.vn", "admin"},
+			{"user7@ou.edu.vn", "organizer"},
+			{"user8@ou.edu.vn", "student"},
+			{"user9@ou.edu.vn", "admin"},
+			{"user10@ou.edu.vn", "organizer"},
+		}
 
-			u := user.User{
-				Email:    fmt.Sprintf("user%d@ou.edu.vn", i),
-				Password: password,
-				Role:     role,
+		for _, u := range seedUsers {
+			_ = db.Create(&user.User{
+				Email:    u.Email,
+				Password: hash,
+				Role:     u.Role,
 				IsActive: true,
-			}
-			db.Create(&u)
+			}).Error
 		}
 	}
 
-	// Lấy 1 admin & 1 organizer để gán quan hệ
 	var admin user.User
 	var organizer user.User
-	db.Where("role = ?", config.RoleAdmin).First(&admin)
-	db.Where("role = ?", config.RoleOrganizer).First(&organizer)
+	var student user.User
 
-	// ================= CONTENT =================
-	db.Model(&content.Content{}).Count(&count)
+	// Ensure we can find at least one of each role
+	if err := db.First(&admin, "role = ? AND is_active = true", "admin").Error; err != nil {
+		return fmt.Errorf("seed aborted: cannot find admin user: %w", err)
+	}
+	if err := db.First(&organizer, "role = ? AND is_active = true", "organizer").Error; err != nil {
+		return fmt.Errorf("seed aborted: cannot find organizer user: %w", err)
+	}
+	if err := db.First(&student, "role = ? AND is_active = true", "student").Error; err != nil {
+		return fmt.Errorf("seed aborted: cannot find student user: %w", err)
+	}
+
+	adminID := admin.ID
+	organizerID := organizer.ID
+	studentID := student.ID
+
+	// ===== CONTENT =====
+	if !db.Migrator().HasTable(&content.Content{}) {
+		return errors.New("seed aborted: contents table does not exist")
+	}
+	if err := db.Model(&content.Content{}).Count(&count).Error; err != nil {
+		return err
+	}
 	if count == 0 {
-		types := []string{"news", "blog", "green_news"}
-
 		for i := 1; i <= 10; i++ {
-			c := content.Content{
-				Title:    fmt.Sprintf("Green Content %d", i),
-				Body:     "This is sample green campus content.",
-				Type:     types[i%len(types)],
-				Status:   "published",
-				AuthorID: admin.ID,
-			}
-			db.Create(&c)
+			_ = db.Create(&content.Content{
+				Title:      fmt.Sprintf("Content %d", i),
+				Body:       "Seeded content",
+				Type:       "news",
+				AuthorID:   adminID,
+				IsFeatured: i%2 == 0,
+			}).Error
 		}
 	}
 
-	// ================= EVENTS =================
-	db.Model(&event.Event{}).Count(&count)
+	// ===== EVENTS =====
+	if !db.Migrator().HasTable(&event.Event{}) {
+		return errors.New("seed aborted: events table does not exist")
+	}
+	if err := db.Model(&event.Event{}).Count(&count).Error; err != nil {
+		return err
+	}
 	if count == 0 {
 		for i := 1; i <= 10; i++ {
-			e := event.Event{
-				Title:       fmt.Sprintf("Green Event %d", i),
-				Description: "OU GreenCampus event",
+			_ = db.Create(&event.Event{
+				Title:       fmt.Sprintf("Event %d", i),
+				Description: "Seeded event",
 				StartTime:   time.Now().AddDate(0, 0, i),
-				EndTime:     time.Now().AddDate(0, 0, i+1),
+				EndTime:     time.Now().AddDate(0, 0, i).Add(2 * time.Hour),
 				Location:    "OU Campus",
-				Capacity:    100,
-				CreatedBy:   organizer.ID,
-			}
-			db.Create(&e)
+				Capacity:    50,
+				CreatedBy:   organizerID,
+			}).Error
 		}
 	}
 
-	// ================= EVENT REGISTRATION =================
-	db.Model(&event.EventRegistration{}).Count(&count)
+	// ===== EVENT REGISTRATIONS =====
+	if !db.Migrator().HasTable(&event.EventRegistration{}) {
+		return errors.New("seed aborted: event_registrations table does not exist")
+	}
+	if err := db.Model(&event.EventRegistration{}).Count(&count).Error; err != nil {
+		return err
+	}
 	if count == 0 {
 		var events []event.Event
-		var students []user.User
-
-		db.Find(&events)
-		db.Where("role = ?", config.RoleStudent).Find(&students)
-
-		for i := 0; i < 10 && i < len(events) && i < len(students); i++ {
-			r := event.EventRegistration{
-				EventID: events[i].ID,
-				UserID:  students[i].ID,
-			}
-			db.Create(&r)
+		_ = db.Limit(10).Find(&events).Error
+		for i, e := range events {
+			_ = db.Create(&event.EventRegistration{
+				EventID:   e.ID,
+				UserID:    studentID,
+				CheckedIn: i%2 == 0,
+			}).Error
 		}
 	}
 
-	// ================= ACTIVITIES =================
-	db.Model(&activity.Activity{}).Count(&count)
+	// ===== ACTIVITIES =====
+	if !db.Migrator().HasTable(&activity.Activity{}) {
+		return errors.New("seed aborted: activities table does not exist")
+	}
+	if err := db.Model(&activity.Activity{}).Count(&count).Error; err != nil {
+		return err
+	}
 	if count == 0 {
-		types := []string{"program", "contest", "campaign"}
-
+		types := []string{activity.TypeProgram, activity.TypeContest, activity.TypeCampaign}
 		for i := 1; i <= 10; i++ {
-			a := activity.Activity{
-				Name:        fmt.Sprintf("Green Activity %d", i),
-				Description: "GreenCampus activity",
-				Type:        types[i%len(types)],
-				StartDate:   time.Now(),
-				EndDate:     time.Now().AddDate(0, 1, 0),
-				CreatedBy:   organizer.ID,
-			}
-			db.Create(&a)
+			_ = db.Create(&activity.Activity{
+				Name:      fmt.Sprintf("Activity %d", i),
+				Type:      types[i%len(types)],
+				Status:    "published",
+				CreatedBy: organizerID,
+			}).Error
 		}
 	}
 
-	// ================= SUBMISSIONS =================
-	db.Model(&activity.Submission{}).Count(&count)
+	// ===== SUBMISSIONS (contest only) =====
+	if !db.Migrator().HasTable(&activity.Submission{}) {
+		return errors.New("seed aborted: submissions table does not exist")
+	}
+	if err := db.Model(&activity.Submission{}).Count(&count).Error; err != nil {
+		return err
+	}
 	if count == 0 {
-		var acts []activity.Activity
-		var students []user.User
-
-		db.Where("type = ?", "contest").Find(&acts)
-		db.Where("role = ?", config.RoleStudent).Find(&students)
-
-		for i := 0; i < 10 && i < len(acts) && i < len(students); i++ {
-			s := activity.Submission{
-				ActivityID: acts[i].ID,
-				UserID:     students[i].ID,
-				Content:    "This is a contest submission",
-				Status:     "submitted",
-				Score:      0,
-			}
-			db.Create(&s)
+		var contests []activity.Activity
+		_ = db.Where("type = ?", activity.TypeContest).Limit(10).Find(&contests).Error
+		for _, a := range contests {
+			_ = db.Create(&activity.Submission{
+				ActivityID: a.ID,
+				UserID:     studentID,
+				Content:    "Seeded submission",
+				Status:     "approved",
+			}).Error
 		}
 	}
 
-	// ================= SYSTEM CONFIG =================
-	db.Model(&system.SystemConfig{}).Count(&count)
+	// ===== CAMPAIGN TASKS =====
+	if !db.Migrator().HasTable(&activity.CampaignTask{}) {
+		return errors.New("seed aborted: campaign_tasks table does not exist")
+	}
+	if err := db.Model(&activity.CampaignTask{}).Count(&count).Error; err != nil {
+		return err
+	}
 	if count == 0 {
-		configs := []system.SystemConfig{
-			{Key: "site_name", Value: "OU GreenCampus"},
-			{Key: "email_sender", Value: "green@ou.edu.vn"},
-			{Key: "max_event_capacity", Value: "500"},
-			{Key: "contest_submission_limit", Value: "3"},
-			{Key: "enable_registration", Value: "true"},
-		}
-
-		for _, cfg := range configs {
-			db.Create(&cfg)
+		var campaigns []activity.Activity
+		_ = db.Where("type = ?", activity.TypeCampaign).Limit(5).Find(&campaigns).Error
+		for _, a := range campaigns {
+			for i := 1; i <= 3; i++ {
+				_ = db.Create(&activity.CampaignTask{
+					ActivityID: a.ID,
+					Title:      fmt.Sprintf("Task %d", i),
+					Points:     10 * i,
+					IsActive:   true,
+				}).Error
+			}
 		}
 	}
 
-	// ================= AUDIT LOG =================
-	db.Model(&system.AuditLog{}).Count(&count)
+	// ===== CAMPAIGN PROGRESS =====
+	if !db.Migrator().HasTable(&activity.CampaignProgress{}) {
+		return errors.New("seed aborted: campaign_progresses table does not exist")
+	}
+	if err := db.Model(&activity.CampaignProgress{}).Count(&count).Error; err != nil {
+		return err
+	}
+	if count == 0 {
+		var tasks []activity.CampaignTask
+		_ = db.Limit(10).Find(&tasks).Error
+		raw := datatypes.JSON([]byte(`{"proof":"seed"}`))
+		for _, t := range tasks {
+			_ = db.Create(&activity.CampaignProgress{
+				ActivityID: t.ActivityID,
+				TaskID:     t.ID,
+				UserID:     studentID,
+				Status:     "approved",
+				Evidence:   raw,
+			}).Error
+		}
+	}
+
+	// ===== SYSTEM CONFIG =====
+	if !db.Migrator().HasTable(&system.SystemConfig{}) {
+		return errors.New("seed aborted: system_configs table does not exist")
+	}
+	if err := db.Model(&system.SystemConfig{}).Count(&count).Error; err != nil {
+		return err
+	}
 	if count == 0 {
 		for i := 1; i <= 10; i++ {
-			log := system.AuditLog{
-				ActorID:   admin.ID,
-				Action:    "SEED_DATA",
-				Target:    fmt.Sprintf("INIT_%d", i),
+			_ = db.Create(&system.SystemConfig{
+				Key:       fmt.Sprintf("config_%d", i),
+				Value:     "value",
+				UpdatedBy: &adminID,
+				UpdatedAt: time.Now(),
+			}).Error
+		}
+	}
+
+	// ===== AUDIT LOG =====
+	if !db.Migrator().HasTable(&system.AuditLog{}) {
+		return errors.New("seed aborted: audit_logs table does not exist")
+	}
+	if err := db.Model(&system.AuditLog{}).Count(&count).Error; err != nil {
+		return err
+	}
+	if count == 0 {
+		for i := 1; i <= 10; i++ {
+			_ = db.Create(&system.AuditLog{
+				ActorID:   &adminID,
+				Role:      "admin",
+				Action:    "SEED",
+				Entity:    "system",
+				EntityID:  fmt.Sprintf("seed_%d", i),
 				CreatedAt: time.Now(),
-			}
-			db.Create(&log)
+			}).Error
 		}
 	}
 
-	fmt.Println("✅ Seeding completed successfully")
 	return nil
 }

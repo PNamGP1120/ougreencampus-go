@@ -4,61 +4,47 @@ import (
 	"errors"
 	"time"
 
-	jwtlib "github.com/golang-jwt/jwt/v5"
+	jwtv5 "github.com/golang-jwt/jwt/v5"
 )
 
 type JWTService struct {
-	secretKey string
-	issuer    string
-	expire    time.Duration
+	secret string
+	expire time.Duration
+	issuer string
 }
 
-type CustomClaims struct {
-	UserID string `json:"user_id"`
-	Role   string `json:"role"`
-	jwtlib.RegisteredClaims
+// ✅ Giữ tương thích với code đang gọi jwt.New(...)
+func New(secret string, expireMinutes int) *JWTService {
+	return NewJWTService(secret, expireMinutes)
 }
 
+// ✅ Constructor chuẩn (bạn có thể dùng NewJWTService hoặc New đều được)
 func NewJWTService(secret string, expireMinutes int) *JWTService {
 	return &JWTService{
-		secretKey: secret,
-		issuer:    "ougreencampus",
-		expire:    time.Duration(expireMinutes) * time.Minute,
+		secret: secret,
+		expire: time.Duration(expireMinutes) * time.Minute,
+		issuer: "ougreencampus",
 	}
 }
 
-func (j *JWTService) GenerateToken(userID string, role string) (string, error) {
-	claims := CustomClaims{
-		UserID: userID,
-		Role:   role,
-		RegisteredClaims: jwtlib.RegisteredClaims{
-			Issuer:    j.issuer,
-			ExpiresAt: jwtlib.NewNumericDate(time.Now().Add(j.expire)),
-			IssuedAt:  jwtlib.NewNumericDate(time.Now()),
-		},
+func (j *JWTService) GenerateToken(userID, role string) (string, error) {
+	claims := jwtv5.MapClaims{
+		"user_id": userID,
+		"role":    role,
+		"iss":     j.issuer,
+		"iat":     time.Now().Unix(),
+		"exp":     time.Now().Add(j.expire).Unix(),
 	}
 
-	token := jwtlib.NewWithClaims(jwtlib.SigningMethodHS256, claims)
-	return token.SignedString([]byte(j.secretKey))
+	token := jwtv5.NewWithClaims(jwtv5.SigningMethodHS256, claims)
+	return token.SignedString([]byte(j.secret))
 }
 
-func (j *JWTService) ValidateToken(tokenStr string) (*CustomClaims, error) {
-	token, err := jwtlib.ParseWithClaims(
-		tokenStr,
-		&CustomClaims{},
-		func(token *jwtlib.Token) (interface{}, error) {
-			return []byte(j.secretKey), nil
-		},
-	)
-
-	if err != nil || !token.Valid {
-		return nil, errors.New("invalid token")
-	}
-
-	claims, ok := token.Claims.(*CustomClaims)
-	if !ok {
-		return nil, errors.New("invalid claims")
-	}
-
-	return claims, nil
+func (j *JWTService) ValidateToken(tokenStr string) (*jwtv5.Token, error) {
+	return jwtv5.Parse(tokenStr, func(token *jwtv5.Token) (interface{}, error) {
+		if _, ok := token.Method.(*jwtv5.SigningMethodHMAC); !ok {
+			return nil, errors.New("invalid signing method")
+		}
+		return []byte(j.secret), nil
+	})
 }

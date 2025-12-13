@@ -1,8 +1,12 @@
 package content
 
+import "errors"
+
 type Service interface {
 	Create(authorID string, req CreateContentRequest) error
-	GetAll() ([]ContentResponse, error)
+	GetAll() ([]Content, error)
+	Update(id string, req UpdateContentRequest) error
+	Delete(id string) error
 }
 
 type service struct {
@@ -14,31 +18,41 @@ func NewService(repo Repository) Service {
 }
 
 func (s *service) Create(authorID string, req CreateContentRequest) error {
-	content := &Content{
+	c := &Content{
 		Title:    req.Title,
 		Body:     req.Body,
 		Type:     req.Type,
-		Status:   "published",
 		AuthorID: authorID,
 	}
-	return s.repo.Create(content)
+	return s.repo.Create(c)
 }
 
-func (s *service) GetAll() ([]ContentResponse, error) {
-	contents, err := s.repo.FindAll()
+func (s *service) GetAll() ([]Content, error) {
+	return s.repo.FindAll()
+}
+
+func (s *service) Update(id string, req UpdateContentRequest) error {
+	c, err := s.repo.FindByID(id)
 	if err != nil {
-		return nil, err
+		return errors.New("content not found")
 	}
 
-	var res []ContentResponse
-	for _, c := range contents {
-		res = append(res, ContentResponse{
-			ID:     c.ID,
-			Title:  c.Title,
-			Body:   c.Body,
-			Type:   c.Type,
-			Status: c.Status,
-		})
+	if req.Title != "" {
+		c.Title = req.Title
 	}
-	return res, nil
+	if req.Body != "" {
+		c.Body = req.Body
+	}
+	if req.Type != "" {
+		c.Type = req.Type
+	}
+	if req.IsFeatured != nil {
+		c.IsFeatured = *req.IsFeatured
+	}
+
+	return s.repo.Update(c)
+}
+
+func (s *service) Delete(id string) error {
+	return s.repo.Delete(id)
 }

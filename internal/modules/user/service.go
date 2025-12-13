@@ -8,7 +8,9 @@ import (
 
 type Service interface {
 	CreateUser(req CreateUserRequest) error
-	GetAllUsers() ([]UserResponse, error)
+	GetAll() ([]User, error)
+	UpdateRole(userID string, req UpdateRoleRequest) error
+	SetActive(userID string, active bool) error
 }
 
 type service struct {
@@ -20,18 +22,15 @@ func NewService(repo Repository) Service {
 }
 
 func (s *service) CreateUser(req CreateUserRequest) error {
-	if !utils.IsValidEmail(req.Email) {
-		return errors.New("invalid email")
+	if _, err := s.repo.FindByEmail(req.Email); err == nil {
+		return errors.New("email already exists")
 	}
 
-	hash, err := utils.HashPassword(req.Password)
-	if err != nil {
-		return err
-	}
+	hashed, _ := utils.HashPassword(req.Password)
 
 	user := &User{
 		Email:    req.Email,
-		Password: hash,
+		Password: hashed,
 		Role:     req.Role,
 		IsActive: true,
 	}
@@ -39,21 +38,26 @@ func (s *service) CreateUser(req CreateUserRequest) error {
 	return s.repo.Create(user)
 }
 
-func (s *service) GetAllUsers() ([]UserResponse, error) {
-	users, err := s.repo.FindAll()
+func (s *service) GetAll() ([]User, error) {
+	return s.repo.FindAll()
+}
+
+func (s *service) UpdateRole(userID string, req UpdateRoleRequest) error {
+	user, err := s.repo.FindByID(userID)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	var result []UserResponse
-	for _, u := range users {
-		result = append(result, UserResponse{
-			ID:       u.ID,
-			Email:    u.Email,
-			Role:     u.Role,
-			IsActive: u.IsActive,
-		})
+	user.Role = req.Role
+	return s.repo.Update(user)
+}
+
+func (s *service) SetActive(userID string, active bool) error {
+	user, err := s.repo.FindByID(userID)
+	if err != nil {
+		return err
 	}
 
-	return result, nil
+	user.IsActive = active
+	return s.repo.Update(user)
 }

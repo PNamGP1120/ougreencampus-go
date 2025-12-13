@@ -8,22 +8,25 @@ import (
 )
 
 type Handler struct {
-	service Service
+	svc Service
 }
 
-func NewHandler(service Service) *Handler {
-	return &Handler{service: service}
+func NewHandler(svc Service) *Handler {
+	return &Handler{svc: svc}
 }
 
 func (h *Handler) Create(c *gin.Context) {
-	var req CreateActivityRequest
+	var req struct {
+		Name string `json:"name"`
+		Type string `json:"type"`
+	}
+
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.BadRequest(c, err.Error())
 		return
 	}
 
-	creatorID := c.GetString("user_id")
-	if err := h.service.Create(creatorID, req); err != nil {
+	if err := h.svc.CreateActivity(req.Name, req.Type, c.GetString("user_id")); err != nil {
 		response.BadRequest(c, err.Error())
 		return
 	}
@@ -31,30 +34,38 @@ func (h *Handler) Create(c *gin.Context) {
 	response.Message(c, http.StatusCreated, "activity created")
 }
 
-func (h *Handler) GetAll(c *gin.Context) {
-	acts, err := h.service.GetAll()
+func (h *Handler) List(c *gin.Context) {
+	data, err := h.svc.ListActivities()
 	if err != nil {
 		response.InternalServerError(c, err.Error())
 		return
 	}
-
-	response.Success(c, http.StatusOK, acts)
+	response.Success(c, http.StatusOK, data)
 }
 
-func (h *Handler) Submit(c *gin.Context) {
-	activityID := c.Param("id")
-	userID := c.GetString("user_id")
+func (h *Handler) SubmitContest(c *gin.Context) {
+	var req struct {
+		Content string `json:"content"`
+	}
 
-	var req SubmitRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.BadRequest(c, err.Error())
 		return
 	}
 
-	if err := h.service.Submit(activityID, userID, req); err != nil {
-		response.InternalServerError(c, err.Error())
+	if err := h.svc.SubmitContest(c.Param("id"), c.GetString("user_id"), req.Content); err != nil {
+		response.BadRequest(c, err.Error())
 		return
 	}
 
-	response.Message(c, http.StatusOK, "submission sent")
+	response.Message(c, http.StatusOK, "submitted")
+}
+
+func (h *Handler) Submissions(c *gin.Context) {
+	data, err := h.svc.ListSubmissions(c.Param("id"))
+	if err != nil {
+		response.InternalServerError(c, err.Error())
+		return
+	}
+	response.Success(c, http.StatusOK, data)
 }

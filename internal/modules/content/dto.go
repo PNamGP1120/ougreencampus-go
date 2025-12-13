@@ -6,10 +6,9 @@ type CreateContentRequest struct {
 	Type  string `json:"type" binding:"required"`
 }
 
-type ContentResponse struct {
-	ID     string `json:"id"`
-	Title  string `json:"title"`
-	Body   string `json:"body"`
-	Type   string `json:"type"`
-	Status string `json:"status"`
+type UpdateContentRequest struct {
+	Title      string `json:"title"`
+	Body       string `json:"body"`
+	Type       string `json:"type"`
+	IsFeatured *bool  `json:"is_featured"`
 }

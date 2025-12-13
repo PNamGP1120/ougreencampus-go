@@ -3,10 +3,11 @@ package activity
 import "gorm.io/gorm"
 
 type Repository interface {
-	Create(activity *Activity) error
-	FindAll() ([]Activity, error)
-	FindByID(id string) (*Activity, error)
-	CreateSubmission(sub *Submission) error
+	CreateActivity(a *Activity) error
+	ListActivities() ([]Activity, error)
+
+	CreateSubmission(s *Submission) error
+	ListSubmissions(activityID string) ([]Submission, error)
 }
 
 type repository struct {
@@ -17,22 +18,22 @@ func NewRepository(db *gorm.DB) Repository {
 	return &repository{db: db}
 }
 
-func (r *repository) Create(activity *Activity) error {
-	return r.db.Create(activity).Error
+func (r *repository) CreateActivity(a *Activity) error {
+	return r.db.Create(a).Error
 }
 
-func (r *repository) FindAll() ([]Activity, error) {
-	var acts []Activity
-	err := r.db.Order("created_at desc").Find(&acts).Error
-	return acts, err
+func (r *repository) ListActivities() ([]Activity, error) {
+	var list []Activity
+	err := r.db.Find(&list).Error
+	return list, err
 }
 
-func (r *repository) FindByID(id string) (*Activity, error) {
-	var act Activity
-	err := r.db.First(&act, "id = ?", id).Error
-	return &act, err
+func (r *repository) CreateSubmission(s *Submission) error {
+	return r.db.Create(s).Error
 }
 
-func (r *repository) CreateSubmission(sub *Submission) error {
-	return r.db.Create(sub).Error
+func (r *repository) ListSubmissions(activityID string) ([]Submission, error) {
+	var list []Submission
+	err := r.db.Where("activity_id = ?", activityID).Find(&list).Error
+	return list, err
 }

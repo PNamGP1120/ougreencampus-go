@@ -15,53 +15,69 @@ import (
 )
 
 func main() {
-	// ================= LOAD CONFIG =================
 	cfg, err := config.Load()
 	if err != nil {
 		log.Fatal("❌ Load config failed:", err)
 	}
-
 	log.Println("✅ Config loaded")
 
-	// ================= CONNECT DATABASE =================
 	db, err := database.Connect(cfg)
 	if err != nil {
 		log.Fatal("❌ Database connection failed:", err)
 	}
-
 	log.Println("✅ Database connected")
 
-	// ================= AUTO MIGRATE =================
-	if err := database.AutoMigrate(
-		db,
-		&user.User{},
-		&content.Content{},
-		&event.Event{},
-		&event.EventRegistration{},
-		&activity.Activity{},
-		&activity.Submission{},
-		&system.SystemConfig{},
-		&system.AuditLog{},
-	); err != nil {
+	if err := database.AutoMigrate(db); err != nil {
 		log.Fatal("❌ Auto migrate failed:", err)
 	}
-
 	log.Println("✅ Database migrated")
 
-	// ================= SEED DATA =================
-	if err := database.Seed(db); err != nil {
-		log.Fatal("❌ Seed data failed:", err)
+	if cfg.AppEnv != "production" {
+		if err := database.Seed(db); err != nil {
+			log.Fatal("❌ Seed failed:", err)
+		}
+		log.Println("🌱 Database seeded")
 	}
 
-	log.Println("✅ Database seeded")
+	jwtSvc := jwt.New(cfg.JWTSecret, cfg.JWTExpire)
 
-	// ================= JWT SERVICE =================
-	jwtSvc := jwt.NewJWTService(cfg.JWTSecret, cfg.JWTExpire)
+	// User
+	userRepo := user.NewRepository(db)
+	userSvc := user.NewService(userRepo)
+	authSvc := user.NewAuthService(userRepo, jwtSvc)
+	userHandler := user.NewHandler(userSvc)
+	authHandler := user.NewAuthHandler(authSvc)
 
-	// ================= ROUTER =================
-	r := router.SetupRouter(db, jwtSvc)
+	// Content
+	contentRepo := content.NewRepository(db)
+	contentSvc := content.NewService(contentRepo)
+	contentHandler := content.NewHandler(contentSvc)
 
-	log.Println("🚀 Server running on port:", cfg.AppPort)
+	// Event
+	eventRepo := event.NewRepository(db)
+	eventSvc := event.NewService(eventRepo)
+	eventHandler := event.NewHandler(eventSvc)
+
+	// Activity
+	activityRepo := activity.NewRepository(db)
+	activitySvc := activity.NewService(activityRepo)
+	activityHandler := activity.NewHandler(activitySvc)
+
+	// System
+	systemRepo := system.NewRepository(db)
+	systemSvc := system.NewService(systemRepo)
+	systemHandler := system.NewHandler(systemSvc)
+
+	r := router.SetupRouter(cfg, jwtSvc, router.Handlers{
+		User:     userHandler,
+		Auth:     authHandler,
+		Content:  contentHandler,
+		Event:    eventHandler,
+		Activity: activityHandler,
+		System:   systemHandler,
+	})
+
+	log.Println("🚀 Server running on port", cfg.AppPort)
 	if err := r.Run(":" + cfg.AppPort); err != nil {
 		log.Fatal("❌ Server failed:", err)
 	}

@@ -8,8 +8,8 @@ import (
 
 type Event struct {
 	ID          string `gorm:"type:uuid;default:gen_random_uuid();primaryKey"`
-	Title       string `gorm:"not null"`
-	Description string `gorm:"type:text"`
+	Title       string
+	Description string
 	StartTime   time.Time
 	EndTime     time.Time
 	Location    string

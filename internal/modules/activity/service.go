@@ -3,9 +3,10 @@ package activity
 import "errors"
 
 type Service interface {
-	Create(creatorID string, req CreateActivityRequest) error
-	GetAll() ([]Activity, error)
-	Submit(activityID, userID string, req SubmitRequest) error
+	CreateActivity(name, typ, creator string) error
+	ListActivities() ([]Activity, error)
+	SubmitContest(activityID, userID, content string) error
+	ListSubmissions(activityID string) ([]Submission, error)
 }
 
 type service struct {
@@ -16,32 +17,32 @@ func NewService(repo Repository) Service {
 	return &service{repo: repo}
 }
 
-func (s *service) Create(creatorID string, req CreateActivityRequest) error {
-	if req.Type != "program" && req.Type != "contest" && req.Type != "campaign" {
+func (s *service) CreateActivity(name, typ, creator string) error {
+	if typ != TypeProgram && typ != TypeContest && typ != TypeCampaign {
 		return errors.New("invalid activity type")
 	}
 
-	act := &Activity{
-		Name:        req.Name,
-		Description: req.Description,
-		Type:        req.Type,
-		StartDate:   req.StartDate,
-		EndDate:     req.EndDate,
-		CreatedBy:   creatorID,
-	}
-	return s.repo.Create(act)
+	return s.repo.CreateActivity(&Activity{
+		Name:      name,
+		Type:      typ,
+		Status:    "published",
+		CreatedBy: creator,
+	})
 }
 
-func (s *service) GetAll() ([]Activity, error) {
-	return s.repo.FindAll()
+func (s *service) ListActivities() ([]Activity, error) {
+	return s.repo.ListActivities()
 }
 
-func (s *service) Submit(activityID, userID string, req SubmitRequest) error {
-	sub := &Submission{
+func (s *service) SubmitContest(activityID, userID, content string) error {
+	return s.repo.CreateSubmission(&Submission{
 		ActivityID: activityID,
 		UserID:     userID,
-		Content:    req.Content,
-		Status:     "submitted",
-	}
-	return s.repo.CreateSubmission(sub)
+		Content:    content,
+		Status:     "pending",
+	})
+}
+
+func (s *service) ListSubmissions(activityID string) ([]Submission, error) {
+	return s.repo.ListSubmissions(activityID)
 }

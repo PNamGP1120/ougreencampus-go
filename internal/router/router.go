@@ -1,6 +1,8 @@
 package router
 
 import (
+	"net/http"
+
 	"github.com/PNamGP1120/ougreencampus-go/internal/config"
 	"github.com/PNamGP1120/ougreencampus-go/internal/middleware"
 	"github.com/PNamGP1120/ougreencampus-go/internal/modules/activity"
@@ -10,88 +12,87 @@ import (
 	"github.com/PNamGP1120/ougreencampus-go/internal/modules/user"
 	"github.com/PNamGP1120/ougreencampus-go/pkg/jwt"
 	"github.com/gin-gonic/gin"
-	"gorm.io/gorm"
 )
 
-func SetupRouter(
-	db *gorm.DB,
-	jwtSvc *jwt.JWTService,
-) *gin.Engine {
+type Handlers struct {
+	User     *user.Handler
+	Auth     *user.AuthHandler
+	Content  *content.Handler
+	Event    *event.Handler
+	Activity *activity.Handler
+	System   *system.Handler
+}
 
+func SetupRouter(cfg *config.Config, jwtSvc *jwt.JWTService, h Handlers) *gin.Engine {
 	r := gin.New()
 	r.Use(gin.Recovery())
-	r.Use(middleware.CORS())
 	r.Use(middleware.Logger())
+	r.Use(middleware.CORS())
 
-	Health(r)
+	// Health
+	r.GET("/health", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"status": "ok"})
+	})
 
-	// ===== INIT REPOS =====
-	userRepo := user.NewRepository(db)
-	contentRepo := content.NewRepository(db)
-	eventRepo := event.NewRepository(db)
-	activityRepo := activity.NewRepository(db)
+	// Auth
+	r.POST("/auth/login", h.Auth.Login)
 
-	// ===== INIT SERVICES =====
-	userSvc := user.NewService(userRepo)
-	authSvc := user.NewAuthService(userRepo, jwtSvc)
-
-	contentSvc := content.NewService(contentRepo)
-	eventSvc := event.NewService(eventRepo)
-	activitySvc := activity.NewService(activityRepo)
-
-	// ===== INIT HANDLERS =====
-	userHandler := user.NewHandler(userSvc)
-	authHandler := user.NewAuthHandler(authSvc)
-
-	contentHandler := content.NewHandler(contentSvc)
-	eventHandler := event.NewHandler(eventSvc)
-	activityHandler := activity.NewHandler(activitySvc)
-
-	// ===== PUBLIC =====
-	auth := r.Group("/auth")
-	{
-		auth.POST("/login", authHandler.Login)
-	}
-
-	// ===== AUTH =====
+	// Protected API
 	api := r.Group("/api")
 	api.Use(middleware.Auth(jwtSvc))
 
-	// ----- USER (ADMIN) -----
-	api.POST("/users", middleware.RequireRole(config.RoleAdmin), userHandler.CreateUser)
-	api.GET("/users", middleware.RequireRole(config.RoleAdmin), userHandler.GetAllUsers)
+	// ===== USER (ADMIN) =====
+	api.GET("/users",
+		middleware.RequireRole(config.RoleAdmin),
+		h.User.GetAllUsers,
+	)
+	api.POST("/users",
+		middleware.RequireRole(config.RoleAdmin),
+		h.User.CreateUser,
+	)
 
-	// ----- CONTENT -----
+	// ===== CONTENT =====
+	api.GET("/contents", h.Content.GetAll)
 	api.POST("/contents",
-		middleware.RequireRole(config.RoleOrganizer, config.RoleAdmin),
-		contentHandler.Create,
+		middleware.RequireRole(config.RoleAdmin, config.RoleOrganizer),
+		h.Content.Create,
 	)
-	api.GET("/contents", contentHandler.GetAll)
 
-	// ----- EVENT -----
+	// ===== EVENT =====
+	api.GET("/events", h.Event.GetAll)
 	api.POST("/events",
-		middleware.RequireRole(config.RoleOrganizer),
-		eventHandler.Create,
+		middleware.RequireRole(config.RoleOrganizer, config.RoleAdmin),
+		h.Event.Create,
 	)
-	api.GET("/events", eventHandler.GetAll)
 	api.POST("/events/:id/register",
 		middleware.RequireRole(config.RoleStudent),
-		eventHandler.Register,
+		h.Event.Register,
 	)
 
-	// ----- ACTIVITY -----
+	// ===== ACTIVITY (SIMPLIFIED) =====
+	api.GET("/activities", h.Activity.List)
 	api.POST("/activities",
-		middleware.RequireRole(config.RoleOrganizer),
-		activityHandler.Create,
+		middleware.RequireRole(config.RoleOrganizer, config.RoleAdmin),
+		h.Activity.Create,
 	)
-	api.GET("/activities", activityHandler.GetAll)
-	api.POST("/activities/:id/submit",
+	api.POST("/activities/:id/contest/submissions",
 		middleware.RequireRole(config.RoleStudent),
-		activityHandler.Submit,
+		h.Activity.SubmitContest,
+	)
+	api.GET("/activities/:id/contest/submissions",
+		middleware.RequireRole(config.RoleOrganizer, config.RoleAdmin),
+		h.Activity.Submissions,
 	)
 
-	// ----- SYSTEM (ADMIN) -----
-	_ = system.NewReportService(db)
+	// ===== SYSTEM (ADMIN) =====
+	admin := api.Group("/admin")
+	admin.Use(middleware.RequireRole(config.RoleAdmin))
+	{
+		admin.GET("/config", h.System.ListConfigs)
+		admin.PUT("/config", h.System.UpsertConfig)
+		admin.GET("/reports/overview", h.System.Overview)
+		admin.GET("/audit", h.System.ListAudit)
+	}
 
 	return r
 }

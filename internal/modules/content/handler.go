@@ -32,11 +32,39 @@ func (h *Handler) Create(c *gin.Context) {
 }
 
 func (h *Handler) GetAll(c *gin.Context) {
-	contents, err := h.service.GetAll()
+	data, err := h.service.GetAll()
 	if err != nil {
 		response.InternalServerError(c, err.Error())
 		return
 	}
 
-	response.Success(c, http.StatusOK, contents)
+	response.Success(c, http.StatusOK, data)
+}
+
+func (h *Handler) Update(c *gin.Context) {
+	id := c.Param("id")
+
+	var req UpdateContentRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, err.Error())
+		return
+	}
+
+	if err := h.service.Update(id, req); err != nil {
+		response.BadRequest(c, err.Error())
+		return
+	}
+
+	response.Message(c, http.StatusOK, "content updated")
+}
+
+func (h *Handler) Delete(c *gin.Context) {
+	id := c.Param("id")
+
+	if err := h.service.Delete(id); err != nil {
+		response.BadRequest(c, err.Error())
+		return
+	}
+
+	response.Message(c, http.StatusOK, "content deleted")
 }

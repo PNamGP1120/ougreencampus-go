@@ -1,9 +1,12 @@
 package event
 
+import "errors"
+
 type Service interface {
 	Create(creatorID string, req CreateEventRequest) error
 	GetAll() ([]Event, error)
 	Register(eventID, userID string) error
+	CheckIn(eventID, userID string) error
 }
 
 type service struct {
@@ -15,7 +18,7 @@ func NewService(repo Repository) Service {
 }
 
 func (s *service) Create(creatorID string, req CreateEventRequest) error {
-	event := &Event{
+	e := &Event{
 		Title:       req.Title,
 		Description: req.Description,
 		StartTime:   req.StartTime,
@@ -24,7 +27,7 @@ func (s *service) Create(creatorID string, req CreateEventRequest) error {
 		Capacity:    req.Capacity,
 		CreatedBy:   creatorID,
 	}
-	return s.repo.Create(event)
+	return s.repo.Create(e)
 }
 
 func (s *service) GetAll() ([]Event, error) {
@@ -32,5 +35,20 @@ func (s *service) GetAll() ([]Event, error) {
 }
 
 func (s *service) Register(eventID, userID string) error {
-	return s.repo.Register(eventID, userID)
+	count, _ := s.repo.CountRegistrations(eventID)
+	event, _ := s.repo.FindByID(eventID)
+
+	if event.Capacity > 0 && int(count) >= event.Capacity {
+		return errors.New("event is full")
+	}
+
+	reg := &EventRegistration{
+		EventID: eventID,
+		UserID:  userID,
+	}
+	return s.repo.Register(reg)
+}
+
+func (s *service) CheckIn(eventID, userID string) error {
+	return s.repo.CheckIn(eventID, userID)
 }

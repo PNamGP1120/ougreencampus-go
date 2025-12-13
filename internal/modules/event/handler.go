@@ -32,12 +32,13 @@ func (h *Handler) Create(c *gin.Context) {
 }
 
 func (h *Handler) GetAll(c *gin.Context) {
-	events, err := h.service.GetAll()
+	list, err := h.service.GetAll()
 	if err != nil {
 		response.InternalServerError(c, err.Error())
 		return
 	}
-	response.Success(c, http.StatusOK, events)
+
+	response.Success(c, http.StatusOK, list)
 }
 
 func (h *Handler) Register(c *gin.Context) {
@@ -45,9 +46,21 @@ func (h *Handler) Register(c *gin.Context) {
 	userID := c.GetString("user_id")
 
 	if err := h.service.Register(eventID, userID); err != nil {
-		response.InternalServerError(c, err.Error())
+		response.BadRequest(c, err.Error())
 		return
 	}
 
 	response.Message(c, http.StatusOK, "registered successfully")
+}
+
+func (h *Handler) CheckIn(c *gin.Context) {
+	eventID := c.Param("id")
+	userID := c.GetString("user_id")
+
+	if err := h.service.CheckIn(eventID, userID); err != nil {
+		response.BadRequest(c, err.Error())
+		return
+	}
+
+	response.Message(c, http.StatusOK, "checked in")
 }

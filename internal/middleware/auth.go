@@ -1,32 +1,52 @@
 package middleware
 
 import (
+	"net/http"
 	"strings"
 
 	"github.com/PNamGP1120/ougreencampus-go/pkg/jwt"
-	"github.com/PNamGP1120/ougreencampus-go/pkg/response"
 	"github.com/gin-gonic/gin"
+	jwtv5 "github.com/golang-jwt/jwt/v5"
 )
 
 func Auth(jwtSvc *jwt.JWTService) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		authHeader := c.GetHeader("Authorization")
-		if authHeader == "" {
-			response.Unauthorized(c)
-			c.Abort()
+		auth := c.GetHeader("Authorization")
+		if auth == "" {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"message": "missing token"})
 			return
 		}
 
-		token := strings.TrimPrefix(authHeader, "Bearer ")
-		claims, err := jwtSvc.ValidateToken(token)
-		if err != nil {
-			response.Unauthorized(c)
-			c.Abort()
+		parts := strings.Split(auth, " ")
+		if len(parts) != 2 || parts[0] != "Bearer" {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"message": "invalid token format"})
 			return
 		}
 
-		c.Set("user_id", claims.UserID)
-		c.Set("role", claims.Role)
+		token, err := jwtSvc.ValidateToken(parts[1])
+		if err != nil || token == nil || !token.Valid {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"message": "invalid token"})
+			return
+		}
+
+		// ✅ jwt/v5: claims mặc định là jwt.MapClaims
+		claims, ok := token.Claims.(jwtv5.MapClaims)
+		if !ok {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"message": "invalid token claims"})
+			return
+		}
+
+		uid, _ := claims["user_id"].(string)
+		role, _ := claims["role"].(string)
+
+		if uid == "" || role == "" {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"message": "invalid token payload"})
+			return
+		}
+
+		c.Set("user_id", uid)
+		c.Set("role", role)
+
 		c.Next()
 	}
 }
