@@ -1,0 +1,9 @@
+app:
+  name: OU GreenCampus
+  port: 8080
+
+jwt:
+  expire_minutes: 60
+
+database:
+  sslmode: disable
