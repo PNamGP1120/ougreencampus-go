@@ -2,7 +2,6 @@ package database
 
 import (
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/PNamGP1120/ougreencampus-go/internal/config"
@@ -11,26 +10,28 @@ import (
 )
 
 func Connect(cfg *config.Config) (*gorm.DB, error) {
-	dsn := os.Getenv("DATABASE_URL")
-
+	dsn := cfg.DatabaseURL
 	if dsn != "" {
-		// log an toàn, không lộ password
-		masked := dsn
-		if i := strings.Index(masked, "@"); i > 0 {
-			masked = "postgresql://***:***" + masked[i:]
+		// đảm bảo sslmode=require nếu Railway không kèm
+		if !strings.Contains(dsn, "sslmode=") {
+			if strings.Contains(dsn, "?") {
+				dsn += "&sslmode=require"
+			} else {
+				dsn += "?sslmode=require"
+			}
 		}
-		fmt.Println("✅ Using DATABASE_URL:", masked)
-	} else {
-		fmt.Println("⚠️ DATABASE_URL is empty; falling back to DB_HOST/DB_PORT")
-		dsn = fmt.Sprintf(
-			"host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
-			cfg.DBHost,
-			cfg.DBPort,
-			cfg.DBUser,
-			cfg.DBPassword,
-			cfg.DBName,
-		)
+		return gorm.Open(postgres.Open(dsn), &gorm.Config{})
 	}
+
+	// fallback local/docker
+	dsn = fmt.Sprintf(
+		"host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
+		cfg.DBHost,
+		cfg.DBPort,
+		cfg.DBUser,
+		cfg.DBPassword,
+		cfg.DBName,
+	)
 
 	return gorm.Open(postgres.Open(dsn), &gorm.Config{})
 }

@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"os"
 	"strconv"
 
@@ -11,6 +12,10 @@ type Config struct {
 	AppEnv  string
 	AppPort string
 
+	// ưu tiên cho Railway
+	DatabaseURL string
+
+	// fallback cho local/docker
 	DBHost     string
 	DBPort     string
 	DBUser     string
@@ -26,9 +31,11 @@ func Load() (*Config, error) {
 
 	expire, _ := strconv.Atoi(getEnv("JWT_EXPIRE_MINUTES", "60"))
 
-	return &Config{
+	cfg := &Config{
 		AppEnv:  getEnv("APP_ENV", "development"),
 		AppPort: getEnv("APP_PORT", "8080"),
+
+		DatabaseURL: os.Getenv("DATABASE_URL"),
 
 		DBHost:     getEnv("DB_HOST", "localhost"),
 		DBPort:     getEnv("DB_PORT", "5432"),
@@ -38,7 +45,14 @@ func Load() (*Config, error) {
 
 		JWTSecret: getEnv("JWT_SECRET", "secret"),
 		JWTExpire: expire,
-	}, nil
+	}
+
+	// Fail fast: production phải có DATABASE_URL (Railway chuẩn)
+	if cfg.AppEnv == "production" && cfg.DatabaseURL == "" {
+		return nil, errors.New("DATABASE_URL is required in production (Railway)")
+	}
+
+	return cfg, nil
 }
 
 func getEnv(key, defaultVal string) string {
