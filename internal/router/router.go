@@ -34,8 +34,11 @@ func SetupRouter(cfg *config.Config, jwtSvc *jwt.JWTService, h Handlers) *gin.En
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
 	})
 
-	// Auth
+	// Auth (public)
 	r.POST("/auth/login", h.Auth.Login)
+
+	// Nếu bạn đã code Register thì mở dòng này:
+	r.POST("/auth/register", h.Auth.Register)
 
 	// Protected API
 	api := r.Group("/api")
@@ -50,12 +53,42 @@ func SetupRouter(cfg *config.Config, jwtSvc *jwt.JWTService, h Handlers) *gin.En
 		middleware.RequireRole(config.RoleAdmin),
 		h.User.CreateUser,
 	)
+	api.GET("/users/:id",
+		middleware.RequireRole(config.RoleAdmin),
+		h.User.GetByID,
+	)
+	api.PUT("/users/:id/role",
+		middleware.RequireRole(config.RoleAdmin),
+		h.User.UpdateRole,
+	)
+	api.PATCH("/users/:id/active",
+		middleware.RequireRole(config.RoleAdmin),
+		h.User.ToggleActive,
+	)
+	api.PATCH("/users/:id/avatar",
+		middleware.RequireRole(config.RoleAdmin),
+		h.User.UpdateAvatar,
+	)
 
 	// ===== CONTENT =====
+	// Authenticated can read
 	api.GET("/contents", h.Content.GetAll)
+	api.GET("/contents/:id", h.Content.GetByID)
+
+	// Organizer/Admin can create/update
 	api.POST("/contents",
 		middleware.RequireRole(config.RoleAdmin, config.RoleOrganizer),
 		h.Content.Create,
+	)
+	api.PUT("/contents/:id",
+		middleware.RequireRole(config.RoleAdmin, config.RoleOrganizer),
+		h.Content.Update,
+	)
+
+	// Admin delete (an toàn)
+	api.DELETE("/contents/:id",
+		middleware.RequireRole(config.RoleAdmin),
+		h.Content.Delete,
 	)
 
 	// ===== EVENT =====
@@ -69,7 +102,7 @@ func SetupRouter(cfg *config.Config, jwtSvc *jwt.JWTService, h Handlers) *gin.En
 		h.Event.Register,
 	)
 
-	// ===== ACTIVITY (SIMPLIFIED) =====
+	// ===== ACTIVITY =====
 	api.GET("/activities", h.Activity.List)
 	api.POST("/activities",
 		middleware.RequireRole(config.RoleOrganizer, config.RoleAdmin),

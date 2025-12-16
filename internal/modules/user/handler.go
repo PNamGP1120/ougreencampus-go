@@ -22,12 +22,13 @@ func (h *Handler) CreateUser(c *gin.Context) {
 		return
 	}
 
-	if err := h.service.CreateUser(req); err != nil {
+	created, err := h.service.CreateUser(req)
+	if err != nil {
 		response.BadRequest(c, err.Error())
 		return
 	}
 
-	response.Message(c, http.StatusCreated, "user created")
+	response.Success(c, http.StatusCreated, created)
 }
 
 func (h *Handler) GetAllUsers(c *gin.Context) {
@@ -36,8 +37,17 @@ func (h *Handler) GetAllUsers(c *gin.Context) {
 		response.InternalServerError(c, err.Error())
 		return
 	}
-
 	response.Success(c, http.StatusOK, users)
+}
+
+func (h *Handler) GetByID(c *gin.Context) {
+	id := c.Param("id")
+	u, err := h.service.GetByID(id)
+	if err != nil {
+		response.BadRequest(c, err.Error())
+		return
+	}
+	response.Success(c, http.StatusOK, u)
 }
 
 func (h *Handler) UpdateRole(c *gin.Context) {
@@ -72,4 +82,21 @@ func (h *Handler) ToggleActive(c *gin.Context) {
 	}
 
 	response.Message(c, http.StatusOK, "user status updated")
+}
+
+func (h *Handler) UpdateAvatar(c *gin.Context) {
+	id := c.Param("id")
+
+	var req UpdateAvatarRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, err.Error())
+		return
+	}
+
+	if err := h.service.UpdateAvatar(id, req.Avatar); err != nil {
+		response.BadRequest(c, err.Error())
+		return
+	}
+
+	response.Message(c, http.StatusOK, "avatar updated")
 }

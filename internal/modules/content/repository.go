@@ -3,11 +3,12 @@ package content
 import "gorm.io/gorm"
 
 type Repository interface {
-	Create(c *Content) error
+	Create(*Content) error
 	FindAll() ([]Content, error)
 	FindByID(id string) (*Content, error)
-	Update(c *Content) error
+	Update(*Content) error
 	Delete(id string) error
+	FindTagsByIDs(ids []string) ([]Tag, error)
 }
 
 type repository struct {
@@ -24,20 +25,33 @@ func (r *repository) Create(c *Content) error {
 
 func (r *repository) FindAll() ([]Content, error) {
 	var list []Content
-	err := r.db.Order("created_at desc").Find(&list).Error
+	err := r.db.
+		Preload("Category").
+		Preload("Tags").
+		Order("created_at desc").
+		Find(&list).Error
 	return list, err
 }
 
 func (r *repository) FindByID(id string) (*Content, error) {
 	var c Content
-	err := r.db.First(&c, "id = ?", id).Error
+	err := r.db.
+		Preload("Category").
+		Preload("Tags").
+		First(&c, "id = ?", id).Error
 	return &c, err
 }
 
 func (r *repository) Update(c *Content) error {
-	return r.db.Save(c).Error
+	return r.db.Session(&gorm.Session{FullSaveAssociations: true}).Save(c).Error
 }
 
 func (r *repository) Delete(id string) error {
 	return r.db.Delete(&Content{}, "id = ?", id).Error
+}
+
+func (r *repository) FindTagsByIDs(ids []string) ([]Tag, error) {
+	var tags []Tag
+	err := r.db.Find(&tags, "id IN ?", ids).Error
+	return tags, err
 }

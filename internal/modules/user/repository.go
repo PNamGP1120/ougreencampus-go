@@ -29,15 +29,15 @@ func (r *repository) FindAll() ([]User, error) {
 }
 
 func (r *repository) FindByID(id string) (*User, error) {
-	var user User
-	err := r.db.First(&user, "id = ?", id).Error
-	return &user, err
+	var u User
+	err := r.db.First(&u, "id = ?", id).Error
+	return &u, err
 }
 
 func (r *repository) FindByEmail(email string) (*User, error) {
-	var user User
-	err := r.db.First(&user, "email = ?", email).Error
-	return &user, err
+	var u User
+	err := r.db.First(&u, "email = ?", email).Error
+	return &u, err
 }
 
 func (r *repository) Update(user *User) error {

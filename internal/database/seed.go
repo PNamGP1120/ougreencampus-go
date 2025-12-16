@@ -16,7 +16,7 @@ import (
 )
 
 func Seed(db *gorm.DB) error {
-	// Guard: ensure tables exist (quick check)
+	// Guard: ensure tables exist
 	if !db.Migrator().HasTable(&user.User{}) {
 		return errors.New("seed aborted: users table does not exist (run migrate first)")
 	}
@@ -32,30 +32,33 @@ func Seed(db *gorm.DB) error {
 			return err
 		}
 
-		// deterministic roles for easier testing
 		seedUsers := []struct {
-			Email string
-			Role  string
+			Email  string
+			Role   string
+			Avatar string
 		}{
-			{"user1@ou.edu.vn", "admin"},
-			{"user2@ou.edu.vn", "organizer"},
-			{"user3@ou.edu.vn", "student"},
-			{"user4@ou.edu.vn", "student"},
-			{"user5@ou.edu.vn", "student"},
-			{"user6@ou.edu.vn", "admin"},
-			{"user7@ou.edu.vn", "organizer"},
-			{"user8@ou.edu.vn", "student"},
-			{"user9@ou.edu.vn", "admin"},
-			{"user10@ou.edu.vn", "organizer"},
+			{"user1@ou.edu.vn", "admin", "https://i.pravatar.cc/150?img=1"},
+			{"user2@ou.edu.vn", "organizer", "https://i.pravatar.cc/150?img=2"},
+			{"user3@ou.edu.vn", "student", "https://i.pravatar.cc/150?img=3"},
+			{"user4@ou.edu.vn", "student", "https://i.pravatar.cc/150?img=4"},
+			{"user5@ou.edu.vn", "student", "https://i.pravatar.cc/150?img=5"},
+			{"user6@ou.edu.vn", "admin", "https://i.pravatar.cc/150?img=6"},
+			{"user7@ou.edu.vn", "organizer", "https://i.pravatar.cc/150?img=7"},
+			{"user8@ou.edu.vn", "student", "https://i.pravatar.cc/150?img=8"},
+			{"user9@ou.edu.vn", "admin", "https://i.pravatar.cc/150?img=9"},
+			{"user10@ou.edu.vn", "organizer", "https://i.pravatar.cc/150?img=10"},
 		}
 
 		for _, u := range seedUsers {
-			_ = db.Create(&user.User{
+			if err := db.Create(&user.User{
 				Email:    u.Email,
 				Password: hash,
 				Role:     u.Role,
+				Avatar:   u.Avatar,
 				IsActive: true,
-			}).Error
+			}).Error; err != nil {
+				return fmt.Errorf("seed users failed for %s: %w", u.Email, err)
+			}
 		}
 	}
 
@@ -63,7 +66,6 @@ func Seed(db *gorm.DB) error {
 	var organizer user.User
 	var student user.User
 
-	// Ensure we can find at least one of each role
 	if err := db.First(&admin, "role = ? AND is_active = true", "admin").Error; err != nil {
 		return fmt.Errorf("seed aborted: cannot find admin user: %w", err)
 	}
@@ -78,22 +80,86 @@ func Seed(db *gorm.DB) error {
 	organizerID := organizer.ID
 	studentID := student.ID
 
-	// ===== CONTENT =====
+	// ===== CONTENT: Categories + Tags + Contents =====
 	if !db.Migrator().HasTable(&content.Content{}) {
 		return errors.New("seed aborted: contents table does not exist")
 	}
+	if !db.Migrator().HasTable(&content.Category{}) {
+		return errors.New("seed aborted: categories table does not exist")
+	}
+	if !db.Migrator().HasTable(&content.Tag{}) {
+		return errors.New("seed aborted: tags table does not exist")
+	}
+
+	// Seed categories if empty
+	if err := db.Model(&content.Category{}).Count(&count).Error; err != nil {
+		return err
+	}
+	if count == 0 {
+		cats := []content.Category{
+			{Name: "Tin tức", Slug: "news"},
+			{Name: "Sống xanh", Slug: "green-living"},
+			{Name: "Sự kiện", Slug: "events"},
+			{Name: "Chia sẻ", Slug: "stories"},
+		}
+		for _, c := range cats {
+			if err := db.Create(&c).Error; err != nil {
+				return fmt.Errorf("seed categories failed: %w", err)
+			}
+		}
+	}
+
+	// Seed tags if empty
+	if err := db.Model(&content.Tag{}).Count(&count).Error; err != nil {
+		return err
+	}
+	if count == 0 {
+		tags := []content.Tag{
+			{Name: "OU", Slug: "ou"},
+			{Name: "GreenCampus", Slug: "greencampus"},
+			{Name: "Recycling", Slug: "recycling"},
+			{Name: "Sustainability", Slug: "sustainability"},
+			{Name: "Workshop", Slug: "workshop"},
+		}
+		for _, t := range tags {
+			if err := db.Create(&t).Error; err != nil {
+				return fmt.Errorf("seed tags failed: %w", err)
+			}
+		}
+	}
+
+	// Fetch some categories/tags for association
+	var catNews content.Category
+	_ = db.First(&catNews, "slug = ?", "news").Error
+
+	var tagOU, tagGC, tagSus content.Tag
+	_ = db.First(&tagOU, "slug = ?", "ou").Error
+	_ = db.First(&tagGC, "slug = ?", "greencampus").Error
+	_ = db.First(&tagSus, "slug = ?", "sustainability").Error
+
+	// Seed contents if empty
 	if err := db.Model(&content.Content{}).Count(&count).Error; err != nil {
 		return err
 	}
 	if count == 0 {
+		imgs := datatypes.JSON([]byte(`["https://picsum.photos/seed/ougc1/800/500","https://picsum.photos/seed/ougc2/800/500"]`))
+
 		for i := 1; i <= 10; i++ {
-			_ = db.Create(&content.Content{
+			cid := catNews.ID
+			cc := &content.Content{
 				Title:      fmt.Sprintf("Content %d", i),
-				Body:       "Seeded content",
+				Body:       "Seeded content with category + tags + images",
 				Type:       "news",
-				AuthorID:   adminID,
+				CoverImage: fmt.Sprintf("https://picsum.photos/seed/cover%d/900/600", i),
+				Images:     imgs,
 				IsFeatured: i%2 == 0,
-			}).Error
+				AuthorID:   adminID,
+				CategoryID: &cid,
+				Tags:       []content.Tag{tagOU, tagGC, tagSus},
+			}
+			if err := db.Create(cc).Error; err != nil {
+				return fmt.Errorf("seed contents failed: %w", err)
+			}
 		}
 	}
 
@@ -106,7 +172,7 @@ func Seed(db *gorm.DB) error {
 	}
 	if count == 0 {
 		for i := 1; i <= 10; i++ {
-			_ = db.Create(&event.Event{
+			if err := db.Create(&event.Event{
 				Title:       fmt.Sprintf("Event %d", i),
 				Description: "Seeded event",
 				StartTime:   time.Now().AddDate(0, 0, i),
@@ -114,7 +180,9 @@ func Seed(db *gorm.DB) error {
 				Location:    "OU Campus",
 				Capacity:    50,
 				CreatedBy:   organizerID,
-			}).Error
+			}).Error; err != nil {
+				return fmt.Errorf("seed events failed: %w", err)
+			}
 		}
 	}
 
@@ -127,13 +195,17 @@ func Seed(db *gorm.DB) error {
 	}
 	if count == 0 {
 		var events []event.Event
-		_ = db.Limit(10).Find(&events).Error
+		if err := db.Limit(10).Find(&events).Error; err != nil {
+			return err
+		}
 		for i, e := range events {
-			_ = db.Create(&event.EventRegistration{
+			if err := db.Create(&event.EventRegistration{
 				EventID:   e.ID,
 				UserID:    studentID,
 				CheckedIn: i%2 == 0,
-			}).Error
+			}).Error; err != nil {
+				return fmt.Errorf("seed registrations failed: %w", err)
+			}
 		}
 	}
 
@@ -147,12 +219,14 @@ func Seed(db *gorm.DB) error {
 	if count == 0 {
 		types := []string{activity.TypeProgram, activity.TypeContest, activity.TypeCampaign}
 		for i := 1; i <= 10; i++ {
-			_ = db.Create(&activity.Activity{
+			if err := db.Create(&activity.Activity{
 				Name:      fmt.Sprintf("Activity %d", i),
 				Type:      types[i%len(types)],
 				Status:    "published",
 				CreatedBy: organizerID,
-			}).Error
+			}).Error; err != nil {
+				return fmt.Errorf("seed activities failed: %w", err)
+			}
 		}
 	}
 
@@ -165,14 +239,18 @@ func Seed(db *gorm.DB) error {
 	}
 	if count == 0 {
 		var contests []activity.Activity
-		_ = db.Where("type = ?", activity.TypeContest).Limit(10).Find(&contests).Error
+		if err := db.Where("type = ?", activity.TypeContest).Limit(10).Find(&contests).Error; err != nil {
+			return err
+		}
 		for _, a := range contests {
-			_ = db.Create(&activity.Submission{
+			if err := db.Create(&activity.Submission{
 				ActivityID: a.ID,
 				UserID:     studentID,
 				Content:    "Seeded submission",
 				Status:     "approved",
-			}).Error
+			}).Error; err != nil {
+				return fmt.Errorf("seed submissions failed: %w", err)
+			}
 		}
 	}
 
@@ -185,15 +263,19 @@ func Seed(db *gorm.DB) error {
 	}
 	if count == 0 {
 		var campaigns []activity.Activity
-		_ = db.Where("type = ?", activity.TypeCampaign).Limit(5).Find(&campaigns).Error
+		if err := db.Where("type = ?", activity.TypeCampaign).Limit(5).Find(&campaigns).Error; err != nil {
+			return err
+		}
 		for _, a := range campaigns {
 			for i := 1; i <= 3; i++ {
-				_ = db.Create(&activity.CampaignTask{
+				if err := db.Create(&activity.CampaignTask{
 					ActivityID: a.ID,
 					Title:      fmt.Sprintf("Task %d", i),
 					Points:     10 * i,
 					IsActive:   true,
-				}).Error
+				}).Error; err != nil {
+					return fmt.Errorf("seed campaign_tasks failed: %w", err)
+				}
 			}
 		}
 	}
@@ -207,16 +289,20 @@ func Seed(db *gorm.DB) error {
 	}
 	if count == 0 {
 		var tasks []activity.CampaignTask
-		_ = db.Limit(10).Find(&tasks).Error
+		if err := db.Limit(10).Find(&tasks).Error; err != nil {
+			return err
+		}
 		raw := datatypes.JSON([]byte(`{"proof":"seed"}`))
 		for _, t := range tasks {
-			_ = db.Create(&activity.CampaignProgress{
+			if err := db.Create(&activity.CampaignProgress{
 				ActivityID: t.ActivityID,
 				TaskID:     t.ID,
 				UserID:     studentID,
 				Status:     "approved",
 				Evidence:   raw,
-			}).Error
+			}).Error; err != nil {
+				return fmt.Errorf("seed campaign_progress failed: %w", err)
+			}
 		}
 	}
 
@@ -229,12 +315,14 @@ func Seed(db *gorm.DB) error {
 	}
 	if count == 0 {
 		for i := 1; i <= 10; i++ {
-			_ = db.Create(&system.SystemConfig{
+			if err := db.Create(&system.SystemConfig{
 				Key:       fmt.Sprintf("config_%d", i),
 				Value:     "value",
 				UpdatedBy: &adminID,
 				UpdatedAt: time.Now(),
-			}).Error
+			}).Error; err != nil {
+				return fmt.Errorf("seed system_configs failed: %w", err)
+			}
 		}
 	}
 
@@ -247,14 +335,16 @@ func Seed(db *gorm.DB) error {
 	}
 	if count == 0 {
 		for i := 1; i <= 10; i++ {
-			_ = db.Create(&system.AuditLog{
+			if err := db.Create(&system.AuditLog{
 				ActorID:   &adminID,
 				Role:      "admin",
 				Action:    "SEED",
 				Entity:    "system",
 				EntityID:  fmt.Sprintf("seed_%d", i),
 				CreatedAt: time.Now(),
-			}).Error
+			}).Error; err != nil {
+				return fmt.Errorf("seed audit_logs failed: %w", err)
+			}
 		}
 	}
 

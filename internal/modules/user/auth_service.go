@@ -2,7 +2,6 @@ package user
 
 import (
 	"errors"
-	"log"
 
 	"github.com/PNamGP1120/ougreencampus-go/internal/utils"
 	"github.com/PNamGP1120/ougreencampus-go/pkg/jwt"
@@ -10,6 +9,7 @@ import (
 
 type AuthService interface {
 	Login(email, password string) (string, error)
+	Register(req RegisterRequest) (UserResponse, error)
 }
 
 type authService struct {
@@ -22,21 +22,40 @@ func NewAuthService(repo Repository, jwtSvc *jwt.JWTService) AuthService {
 }
 
 func (a *authService) Login(email, password string) (string, error) {
-	user, err := a.repo.FindByEmail(email)
+	u, err := a.repo.FindByEmail(email)
 	if err != nil {
 		return "", errors.New("invalid credentials")
 	}
-
-	if !user.IsActive {
+	if !u.IsActive {
 		return "", errors.New("account locked")
 	}
-
-	// DEBUG (tạm thời)
-	if err := utils.CheckPassword(password, user.Password); err != nil {
-		log.Println("❌ Password mismatch for:", email)
+	if err := utils.CheckPassword(password, u.Password); err != nil {
 		return "", errors.New("invalid credentials")
 	}
+	return a.jwtSvc.GenerateToken(u.ID, u.Role)
+}
 
-	log.Println("✅ Password OK for:", email)
-	return a.jwtSvc.GenerateToken(user.ID, user.Role)
+func (a *authService) Register(req RegisterRequest) (UserResponse, error) {
+	if _, err := a.repo.FindByEmail(req.Email); err == nil {
+		return UserResponse{}, errors.New("email already exists")
+	}
+
+	hashed, err := utils.HashPassword(req.Password)
+	if err != nil {
+		return UserResponse{}, err
+	}
+
+	u := &User{
+		Email:    req.Email,
+		Password: hashed,
+		Role:     "student", // FIX CỨNG
+		Avatar:   req.Avatar,
+		IsActive: true,
+	}
+
+	if err := a.repo.Create(u); err != nil {
+		return UserResponse{}, err
+	}
+
+	return ToUserResponse(*u), nil
 }
