@@ -1,0 +1,27 @@
+services:
+  api:
+    build: .
+    container_name: ougreencampus-api
+    ports:
+      - "8080:8080"
+    env_file:
+      - .env
+    depends_on:
+      - db
+    restart: unless-stopped
+
+  db:
+    image: postgres:16
+    container_name: ougreencampus-db
+    environment:
+      POSTGRES_USER: ou
+      POSTGRES_PASSWORD: oupassword
+      POSTGRES_DB: ougreencampus
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    restart: unless-stopped
+
+volumes:
+  pgdata:
