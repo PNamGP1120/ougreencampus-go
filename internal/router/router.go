@@ -3,7 +3,11 @@ package router
 import (
 	"github.com/PNamGP1120/ougreencampus-go/internal/config"
 	"github.com/PNamGP1120/ougreencampus-go/internal/middleware"
+	"github.com/PNamGP1120/ougreencampus-go/internal/modules/activity"
+	"github.com/PNamGP1120/ougreencampus-go/internal/modules/content"
+	"github.com/PNamGP1120/ougreencampus-go/internal/modules/event"
 	"github.com/PNamGP1120/ougreencampus-go/internal/modules/media"
+	"github.com/PNamGP1120/ougreencampus-go/internal/modules/system"
 	"github.com/PNamGP1120/ougreencampus-go/internal/modules/user"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -23,6 +27,10 @@ func Setup(db *gorm.DB, cfg *config.Config) *gin.Engine {
 	// Register modules
 	user.RegisterRoutes(api, db, cfg)
 	media.RegisterRoutes(api, db, cfg)
+	content.RegisterRoutes(api, db, cfg)
+	activity.RegisterRoutes(api, db, cfg)
+	event.RegisterRoutes(api, db, cfg)
+	system.RegisterRoutes(api, db, cfg)
 
 	return r
 }
