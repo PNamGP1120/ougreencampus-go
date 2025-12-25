@@ -23,6 +23,7 @@ func Setup(db *gorm.DB, cfg *config.Config) *gin.Engine {
 	r.Use(cors.New(cors.Config{
 		AllowOrigins: []string{
 			"http://localhost:3000",
+			"https://ougreencampus-nextjs-production.up.railway.app",
 		},
 		AllowMethods: []string{
 			"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS",
