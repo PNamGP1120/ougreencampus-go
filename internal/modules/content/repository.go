@@ -23,20 +23,51 @@ type repository struct {
 func NewRepository(db *gorm.DB) Repository {
 	return &repository{db}
 }
+func (r *repository) List(
+	filter map[string]interface{},
+	page, limit int,
+) ([]Content, int64, error) {
 
-func (r *repository) List(filter map[string]interface{}, page, limit int) ([]Content, int64, error) {
-	var items []Content
-	var total int64
+	var (
+		items []Content
+		total int64
+	)
 
-	q := r.db.Model(&Content{}).Preload("Tags").Preload("Category")
+	db := r.db.
+		Model(&Content{}).
+		Preload("Tags").
+		Preload("Category")
 
-	for k, v := range filter {
-		q = q.Where(k, v)
+	// ===== FILTER THEO COLUMN THẬT =====
+	if categoryID, ok := filter["category_id"]; ok {
+		db = db.Where("category_id = ?", categoryID)
 	}
 
-	q.Count(&total)
-	err := q.Offset((page - 1) * limit).Limit(limit).Find(&items).Error
-	return items, total, err
+	// ===== SEARCH (LOGIC, KHÔNG PHẢI COLUMN) =====
+	if search, ok := filter["search"]; ok {
+		keyword := "%" + search.(string) + "%"
+		db = db.Where(
+			"title ILIKE ? OR body ILIKE ?",
+			keyword, keyword,
+		)
+	}
+
+	// ===== COUNT (PHẢI ÁP DÙNG CÙNG FILTER) =====
+	if err := db.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	// ===== PAGINATION =====
+	offset := (page - 1) * limit
+	if err := db.
+		Order("created_at DESC").
+		Offset(offset).
+		Limit(limit).
+		Find(&items).Error; err != nil {
+		return nil, 0, err
+	}
+
+	return items, total, nil
 }
 
 func (r *repository) Create(c *Content) error {

@@ -3,6 +3,7 @@ package content
 import (
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/PNamGP1120/ougreencampus-go/internal/common"
 	"github.com/gin-gonic/gin"
@@ -19,12 +20,36 @@ func NewHandler(s Service) *Handler {
 func (h *Handler) List(c *gin.Context) {
 	page, limit := common.GetPagination(c)
 
+	// filter chỉ chứa dữ liệu raw, KHÔNG phải SQL
 	filter := map[string]interface{}{}
+
+	// ===== category filter =====
 	if cid := c.Query("category_id"); cid != "" {
-		filter["category_id"] = cid
+		id, err := strconv.Atoi(cid)
+		if err != nil || id <= 0 {
+			common.ErrorResponse(c, http.StatusBadRequest, "invalid category_id")
+			return
+		}
+		filter["category_id"] = id
 	}
 
-	items, total, _ := h.service.List(filter, page, limit)
+	// ===== search filter (keyword) =====
+	if search := strings.TrimSpace(c.Query("search")); search != "" {
+		filter["search"] = search
+	}
+
+	// ===== call service =====
+	items, total, err := h.service.List(filter, page, limit)
+	if err != nil {
+		common.ErrorResponse(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	// ===== đảm bảo FE luôn nhận array =====
+	if items == nil {
+		items = []Content{}
+	}
+
 	common.SuccessResponse(c, gin.H{
 		"items": items,
 		"pagination": gin.H{
