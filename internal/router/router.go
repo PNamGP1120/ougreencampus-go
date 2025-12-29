@@ -24,6 +24,7 @@ func Setup(db *gorm.DB, cfg *config.Config) *gin.Engine {
 		AllowOrigins: []string{
 			"http://localhost:3000",
 			"https://ougreencampus-nextjs-production.up.railway.app",
+			"https://ougreencampus-nextjs.vercel.app",
 		},
 		AllowMethods: []string{
 			"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS",
